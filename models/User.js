@@ -43,18 +43,19 @@ const userSchema = new mongoose.Schema(
 );
 
 // pre middleware (or a pre hook)
-userSchema.pre("save", async function (next) {
+userSchema.pre("save", async function () {
     // Arrow functions don't have their own this
   if (!this.isModified("password")) {
     // Checks whether the password field has changed.
-    return next();
+    return;
+    // return next();
     // Skips the hashing logic and continues saving the document.
   }
 
   const salt = await bcrypt.genSalt(10);
   this.password = await bcrypt.hash(this.password, salt);
 
-  next();
+//   next();
 //   Passes control to the next middleware (or the actual save operation).
 });
 
