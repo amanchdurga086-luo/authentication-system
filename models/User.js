@@ -49,7 +49,6 @@ userSchema.pre("save", async function () {
     // Checks whether the password field has changed.
     return;
     // return next();
-    // Skips the hashing logic and continues saving the document.
   }
 
   const salt = await bcrypt.genSalt(10);
