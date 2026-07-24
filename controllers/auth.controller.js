@@ -107,8 +107,16 @@ const getProfile = async (req, res) => {
   });
 };
 
+const adminDashboard = (req, res) => {
+  return res.status(200).json({
+    success: true,
+    message: "Welcome Admin",
+  });
+};
+
 module.exports = {
   registerUser,
   loginUser,
   getProfile,
+  adminDashboard,
 };
