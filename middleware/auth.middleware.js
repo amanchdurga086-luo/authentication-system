@@ -22,7 +22,7 @@ const authenticate = async (req, res, next) => {
         message: "User no longer exists",
       });
     }
-
+// --------------------------------------
     req.user = user;
 
     next();

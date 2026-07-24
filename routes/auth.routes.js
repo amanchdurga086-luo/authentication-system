@@ -8,7 +8,8 @@ const {
   registerUser,
    loginUser ,
    getProfile,
-    adminDashboard
+    adminDashboard,
+    getCurrentUser,
   } = require("../controllers/auth.controller");
 const { registerValidator, loginValidator } = require("../validators/auth.validator");
 const validate = require("../middleware/validate.middleware");
@@ -39,6 +40,12 @@ router.get(
     authenticate,
     authorize("admin"),
     adminDashboard
+);
+
+router.get(
+  "/me",
+  authenticate,
+  getCurrentUser
 );
 
 module.exports = router;
