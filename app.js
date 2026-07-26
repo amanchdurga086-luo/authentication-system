@@ -2,6 +2,7 @@ const express = require("express");
 const cors = require("cors");
 const cookieParser = require("cookie-parser");
 const authRoutes = require("./routes/auth.routes");
+const errorHandler = require("./middleware/error.middleware");
 
 const app = express();
 
@@ -19,6 +20,8 @@ app.use(
 );
 
 app.use("/api/v1/auth", authRoutes);
+
+app.use(errorHandler);
 
 app.get("/", (req, res) => {
   res.status(200).json({
