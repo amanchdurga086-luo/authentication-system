@@ -1,121 +1,93 @@
 const User = require("../models/User");
 const jwt = require("jsonwebtoken");
 
-const registerUser = async (req, res) => {
-  try {
-    const { name, email, password } = req.body;
+const asyncHandler = require("../utils/asyncHandler");
+const ApiError = require("../utils/ApiError");
 
-    const existingUser = await User.findOne({ email });
 
-    if (existingUser) {
-      return res.status(409).json({
-        success: false,
-        message: "Email already registered",
-      });
-    }
+const registerUser = asyncHandler(async (req, res) => {
+  const { name, email, password } = req.body;
 
-    const user = await User.create({
-      name,
-      email,
-      password,
-    });
+  // Check if email already exists
+  const existingUser = await User.findOne({ email });
 
-    return res.status(201).json({
-      success: true,
-      message: "User registered successfully",
-      data: {
-        id: user._id,
-        name: user.name,
-        email: user.email,
-        role: user.role,
-        isVerified: user.isVerified,
-      },
-    });
-  } catch (error) {
-    return res.status(500).json({
-      success: false,
-      message: error.message,
-    });
+  if (existingUser) {
+    throw new ApiError(409, "Email already registered");
   }
-};
 
-const loginUser = async (req, res) => {
-  try {
-    const { email, password } = req.body;
+  // Create user
+  const user = await User.create({
+    name,
+    email,
+    password,
+  });
 
-    const user = await User.findOne({ email }).select("+password");
-
-    if (!user) {
-      return res.status(401).json({
-        success: false,
-        message: "Invalid email or password",
-      });
-    }
-
-    const isPasswordMatched = await user.comparePassword(password);
-
-    if (!isPasswordMatched) {
-      return res.status(401).json({
-        success: false,
-        message: "Invalid email or password",
-      });
-    }
-//  ---------------------
-   const token = jwt.sign(
-  {
-    id: user._id,
-    role: user.role,
-  },
-  process.env.JWT_SECRET,
-  {
-    expiresIn: process.env.JWT_EXPIRES_IN,
-  }
-);
-
-res.cookie("token", token, {
-  httpOnly: true,
-  secure: process.env.NODE_ENV === "production",
-  sameSite: "strict",
-  maxAge: 24 * 60 * 60 * 1000,
+  res.status(201).json({
+    success: true,
+    message: "User registered successfully",
+    data: {
+      id: user._id,
+      name: user.name,
+      email: user.email,
+      role: user.role,
+      isVerified: user.isVerified,
+    },
+  });
 });
 
-    return res.status(200).json({
-      success: true,
-      message: "Login successful",
-      data: {
-        id: user._id,
-        name: user.name,
-        email: user.email,
-        role: user.role,
-      },
-    });
-  } catch (error) {
-    console.error(error);
 
-    return res.status(500).json({
-      success: false,
-      message: "Internal Server Error",
-    });
+const loginUser = asyncHandler(async (req, res) => {
+  const { email, password } = req.body;
+
+  // Find user with password
+  const user = await User.findOne({ email }).select("+password");
+
+  if (!user) {
+    throw new ApiError(401, "Invalid email or password");
   }
-};
 
+  // Compare password
+  const isPasswordMatched = await user.comparePassword(password);
 
-const getProfile = async (req, res) => {
-  return res.status(200).json({
-    success: true,
-    data: req.user,
+  if (!isPasswordMatched) {
+    throw new ApiError(401, "Invalid email or password");
+  }
+
+  // Generate JWT
+  const token = jwt.sign(
+    {
+      id: user._id,
+      role: user.role,
+    },
+    process.env.JWT_SECRET,
+    {
+      expiresIn: process.env.JWT_EXPIRES_IN,
+    }
+  );
+
+  // Send JWT in Cookie
+  res.cookie("token", token, {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === "production",
+    sameSite: "strict",
+    maxAge: 24 * 60 * 60 * 1000,
   });
-};
 
-const adminDashboard = (req, res) => {
-  return res.status(200).json({
+  res.status(200).json({
     success: true,
-    message: "Welcome Admin",
+    message: "Login successful",
+    data: {
+      id: user._id,
+      name: user.name,
+      email: user.email,
+      role: user.role,
+    },
   });
-};
+});
 
-const getCurrentUser = async (req, res) => {
-  return res.status(200).json({
+
+const getProfile = asyncHandler(async (req, res) => {
+  res.status(200).json({
     success: true,
     data: {
       id: req.user._id,
@@ -126,12 +98,37 @@ const getCurrentUser = async (req, res) => {
       createdAt: req.user.createdAt,
     },
   });
-};
+});
+
+
+
+const adminDashboard = asyncHandler(async (req, res) => {
+  res.status(200).json({
+    success: true,
+    message: "Welcome Admin",
+  });
+});
+
+const getCurrentUser = asyncHandler(async (req, res) => {
+  res.status(200).json({
+    success: true,
+    data: {
+      id: req.user._id,
+      name: req.user.name,
+      email: req.user.email,
+      role: req.user.role,
+      isVerified: req.user.isVerified,
+      createdAt: req.user.createdAt,
+    },
+  });
+});
+
+
 
 module.exports = {
   registerUser,
   loginUser,
   getProfile,
-  adminDashboard,
   getCurrentUser,
+  adminDashboard,
 };
