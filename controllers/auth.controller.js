@@ -3,6 +3,7 @@ const jwt = require("jsonwebtoken");
 
 const asyncHandler = require("../utils/asyncHandler");
 const ApiError = require("../utils/ApiError");
+const ApiResponse = require("../utils/ApiResponse");
 
 
 const registerUser = asyncHandler(async (req, res) => {
@@ -22,17 +23,18 @@ const registerUser = asyncHandler(async (req, res) => {
     password,
   });
 
-  res.status(201).json({
-    success: true,
-    message: "User registered successfully",
-    data: {
+  res.status(201).json(
+    new ApiResponse(
+    201,
+    "User registered successfully",
+    {
       id: user._id,
       name: user.name,
       email: user.email,
       role: user.role,
       isVerified: user.isVerified,
     },
-  });
+  ));
 });
 
 
@@ -47,9 +49,9 @@ const loginUser = asyncHandler(async (req, res) => {
   }
 
   // Compare password
-  const isPasswordMatched = await user.comparePassword(password);
+  const isMatched = await user.comparePassword(password);
 
-  if (!isPasswordMatched) {
+  if (!isMatched) {
     throw new ApiError(401, "Invalid email or password");
   }
 
@@ -73,23 +75,29 @@ const loginUser = asyncHandler(async (req, res) => {
     maxAge: 24 * 60 * 60 * 1000,
   });
 
-  res.status(200).json({
-    success: true,
-    message: "Login successful",
-    data: {
-      id: user._id,
-      name: user.name,
-      email: user.email,
-      role: user.role,
-    },
-  });
+  res
+  .status(200)
+  .json(
+    new ApiResponse(
+      200,
+      "Login successful",
+      {
+        id: user._id,
+        name: user.name,
+        email: user.email,
+        role: user.role,
+      }
+    )
+  );
 });
 
 
 const getProfile = asyncHandler(async (req, res) => {
-  res.status(200).json({
-    success: true,
-    data: {
+  res.status(200).json(
+    new ApiResponse(
+    200,
+    "Current user fetched successfully",
+    {
       id: req.user._id,
       name: req.user.name,
       email: req.user.email,
@@ -97,22 +105,25 @@ const getProfile = asyncHandler(async (req, res) => {
       isVerified: req.user.isVerified,
       createdAt: req.user.createdAt,
     },
-  });
+  ));
 });
 
 
 
 const adminDashboard = asyncHandler(async (req, res) => {
-  res.status(200).json({
-    success: true,
-    message: "Welcome Admin",
-  });
+  res.status(200).json(
+    new ApiResponse(
+    200,
+    "Admin dashboard accessed successfully",
+  ));
 });
 
 const getCurrentUser = asyncHandler(async (req, res) => {
-  res.status(200).json({
-    success: true,
-    data: {
+  res.status(200).json(
+    new ApiResponse(
+    200,
+    "Current user fetched successfully",
+    {
       id: req.user._id,
       name: req.user.name,
       email: req.user.email,
@@ -120,7 +131,7 @@ const getCurrentUser = asyncHandler(async (req, res) => {
       isVerified: req.user.isVerified,
       createdAt: req.user.createdAt,
     },
-  });
+  ));
 });
 
 
