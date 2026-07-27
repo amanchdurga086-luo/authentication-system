@@ -134,6 +134,21 @@ const getCurrentUser = asyncHandler(async (req, res) => {
   ));
 });
 
+const logoutUser = asyncHandler(async (req, res) => {
+  res.clearCookie("token", {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === "production",
+    sameSite: "strict",
+  });
+
+  res.status(200).json(
+    new ApiResponse(
+      200,
+      "Logged out successfully"
+    )
+  );
+});
+
 
 
 module.exports = {
@@ -142,4 +157,5 @@ module.exports = {
   getProfile,
   getCurrentUser,
   adminDashboard,
+  logoutUser,
 };

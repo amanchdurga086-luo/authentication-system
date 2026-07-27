@@ -10,6 +10,7 @@ const {
    getProfile,
     adminDashboard,
     getCurrentUser,
+    logoutUser,
   } = require("../controllers/auth.controller");
 const { registerValidator, loginValidator } = require("../validators/auth.validator");
 const validate = require("../middleware/validate.middleware");
@@ -47,5 +48,10 @@ router.get(
   authenticate,
   getCurrentUser
 );
+
+router.post(
+  "/logout",
+  authenticate,
+  logoutUser);
 
 module.exports = router;
