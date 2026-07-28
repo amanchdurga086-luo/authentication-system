@@ -4,6 +4,7 @@ const jwt = require("jsonwebtoken");
 const asyncHandler = require("../utils/asyncHandler");
 const ApiError = require("../utils/ApiError");
 const ApiResponse = require("../utils/ApiResponse");
+const sendToken = require("../utils/sendToken");
 
 
 const registerUser = asyncHandler(async (req, res) => {
@@ -55,40 +56,14 @@ const loginUser = asyncHandler(async (req, res) => {
     throw new ApiError(401, "Invalid email or password");
   }
 
-  // Generate JWT
-  const token = jwt.sign(
-    {
-      id: user._id,
-      role: user.role,
-    },
-    process.env.JWT_SECRET,
-    {
-      expiresIn: process.env.JWT_EXPIRES_IN,
-    }
+  // generate token and send response
+  sendToken(
+    user,
+    200,
+    res,
+    "Login successful"
   );
 
-  // Send JWT in Cookie
-  res.cookie("token", token, {
-    httpOnly: true,
-    secure: process.env.NODE_ENV === "production",
-    sameSite: "strict",
-    maxAge: 24 * 60 * 60 * 1000,
-  });
-
-  res
-  .status(200)
-  .json(
-    new ApiResponse(
-      200,
-      "Login successful",
-      {
-        id: user._id,
-        name: user.name,
-        email: user.email,
-        role: user.role,
-      }
-    )
-  );
 });
 
 
