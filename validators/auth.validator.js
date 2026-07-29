@@ -37,7 +37,20 @@ const loginValidator = [
     .withMessage("Password is required"),
 ];
 
+const changePasswordValidator = [
+    body("oldPassword")
+        .notEmpty()
+        .withMessage("Old password is required"),
+
+    body("newPassword")
+        .notEmpty()
+        .withMessage("New password is required")
+        .isLength({ min: 6 })
+        .withMessage("Password must be at least 6 characters"),
+];
+
 module.exports = {
   registerValidator,
   loginValidator,
+  changePasswordValidator,
 };

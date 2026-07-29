@@ -11,8 +11,13 @@ const {
     adminDashboard,
     getCurrentUser,
     logoutUser,
+    changePassword,
   } = require("../controllers/auth.controller");
-const { registerValidator, loginValidator } = require("../validators/auth.validator");
+const {
+   registerValidator,
+   loginValidator,  
+   changePasswordValidator, 
+  } = require("../validators/auth.validator");
 const validate = require("../middleware/validate.middleware");
 const authorize = require("../middleware/authorize.middleware");
 
@@ -52,6 +57,15 @@ router.get(
 router.post(
   "/logout",
   authenticate,
-  logoutUser);
+  logoutUser
+);
+
+router.put(
+    "/change-password",
+    authenticate,
+    changePasswordValidator,
+    validate,
+    changePassword,
+);
 
 module.exports = router;

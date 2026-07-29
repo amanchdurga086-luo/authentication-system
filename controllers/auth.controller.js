@@ -125,6 +125,37 @@ const logoutUser = asyncHandler(async (req, res) => {
 });
 
 
+const changePassword = asyncHandler(async (req, res) => {
+    const { oldPassword, newPassword } = req.body;
+
+    // Fetch user with password
+    const user = await User.findById(req.user._id).select("+password");
+
+    if (!user) {
+        throw new ApiError(404, "User not found");
+    }
+
+    // Verify old password
+    const isMatch = await user.comparePassword(oldPassword);
+
+    if (!isMatch) {
+        throw new ApiError(401, "Old password is incorrect");
+    }
+
+    // Update password
+    user.password = newPassword;
+
+    // Triggers pre("save") middleware and hashes the password
+    await user.save();
+
+    res.status(200).json(
+        new ApiResponse(
+            200,
+            "Password changed successfully"
+        )
+    );
+});
+
 
 module.exports = {
   registerUser,
@@ -133,4 +164,5 @@ module.exports = {
   getCurrentUser,
   adminDashboard,
   logoutUser,
+  changePassword,
 };
