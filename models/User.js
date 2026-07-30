@@ -36,10 +36,22 @@ const userSchema = new mongoose.Schema(
       type: Boolean,
       default: false,
     },
+
   },
   {
     timestamps: true,
+  },
+
+  {
+    passwordResetToken: {
+        type: String,
+    },
+
+    passwordResetExpires: {
+        type: Date,
+    },
   }
+  
 );
 
 // pre middleware (or a pre hook)
