@@ -49,8 +49,17 @@ const changePasswordValidator = [
         .withMessage("Password must be at least 6 characters"),
 ];
 
+const forgotPasswordValidator = [
+  body("email")
+    .notEmpty()
+    .withMessage("Email is required")
+    .isEmail()
+    .withMessage("Please provide a valid email"),
+];
+
 module.exports = {
   registerValidator,
   loginValidator,
   changePasswordValidator,
+  forgotPasswordValidator,
 };

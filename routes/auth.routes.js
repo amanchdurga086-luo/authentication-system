@@ -12,12 +12,16 @@ const {
     getCurrentUser,
     logoutUser,
     changePassword,
+    forgotPassword,
   } = require("../controllers/auth.controller");
+
 const {
    registerValidator,
    loginValidator,  
    changePasswordValidator, 
+   forgotPasswordValidator,
   } = require("../validators/auth.validator");
+
 const validate = require("../middleware/validate.middleware");
 const authorize = require("../middleware/authorize.middleware");
 
@@ -66,6 +70,13 @@ router.put(
     changePasswordValidator,
     validate,
     changePassword,
+);
+
+router.post(
+  "/forgot-password",
+  forgotPasswordValidator,
+  validate,
+  forgotPassword
 );
 
 module.exports = router;

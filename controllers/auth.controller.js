@@ -156,6 +156,43 @@ const changePassword = asyncHandler(async (req, res) => {
     );
 });
 
+const forgotPassword = asyncHandler(async (req, res) => {
+  const { email } = req.body;
+
+  // Find user
+  const user = await User.findOne({ email });
+
+  if (!user) {
+    throw new ApiError(404, "User not found");
+  }
+
+  // Generate reset token
+  const resetToken = user.generatePasswordResetToken();
+
+  // Save token and expiry
+  await user.save({
+    // "Skip validation this time. only save the reset token and expiry"
+    validateBeforeSave: false,
+  });
+
+  // Create reset URL
+  const resetUrl =
+    `${req.protocol}://${req.get("host")}/api/v1/auth/reset-password/${resetToken}`;
+
+  // Temporary (email will be added in next lesson)
+  console.log("Reset URL:", resetUrl);
+
+  res.status(200).json(
+    new ApiResponse(
+      200,
+      "Password reset link generated successfully",
+      {
+        resetUrl,
+      }
+    )
+  );
+});
+
 
 module.exports = {
   registerUser,
@@ -165,4 +202,5 @@ module.exports = {
   adminDashboard,
   logoutUser,
   changePassword,
+  forgotPassword,
 };
