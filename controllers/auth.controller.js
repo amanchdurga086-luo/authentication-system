@@ -6,6 +6,8 @@ const ApiError = require("../utils/ApiError");
 const ApiResponse = require("../utils/ApiResponse");
 const sendToken = require("../utils/sendToken");
 
+const sendEmail = require("../utils/sendEmail");
+
 
 const registerUser = asyncHandler(async (req, res) => {
   const { name, email, password } = req.body;
@@ -181,6 +183,11 @@ const forgotPassword = asyncHandler(async (req, res) => {
 
   // Temporary (email will be added in next lesson)
   console.log("Reset URL:", resetUrl);
+  await sendEmail({
+    email: user.email,
+    subject: "Password Reset Request",
+    message: `Reset your password using this link:\n\n${resetUrl}\n\nThis link expires in 15 minutes.`,
+  });
 
   res.status(200).json(
     new ApiResponse(
