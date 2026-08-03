@@ -181,23 +181,37 @@ const forgotPassword = asyncHandler(async (req, res) => {
   const resetUrl =
     `${req.protocol}://${req.get("host")}/api/v1/auth/reset-password/${resetToken}`;
 
-  // Temporary (email will be added in next lesson)
+// ------------------------------------
   console.log("Reset URL:", resetUrl);
-  await sendEmail({
-    email: user.email,
-    subject: "Password Reset Request",
-    message: `Reset your password using this link:\n\n${resetUrl}\n\nThis link expires in 15 minutes.`,
-  });
+  try {
+    await sendEmail({
+      email: user.email,
+      subject: "Password Reset Request",
+      message: `Reset your password using this link:\n\n${resetUrl}\n\nThis link expires in 15 minutes.`,
+    });
 
-  res.status(200).json(
-    new ApiResponse(
-      200,
-      "Password reset link generated successfully",
-      {
-        resetUrl,
-      }
-    )
-  );
+    res.status(200).json(
+      new ApiResponse(
+        200,
+        "Password reset email sent successfully"
+      )
+    );
+
+  } catch (error) {
+
+    // Rollback
+    user.passwordResetToken = undefined;
+    user.passwordResetExpires = undefined;
+
+    await user.save({
+      validateBeforeSave: false,
+    });
+
+    throw new ApiError(
+      500,
+      "Email could not be sent. Please try again later."
+    );
+  }
 });
 
 
