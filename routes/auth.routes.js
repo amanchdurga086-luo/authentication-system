@@ -13,6 +13,7 @@ const {
     logoutUser,
     changePassword,
     forgotPassword,
+    resetPassword,
   } = require("../controllers/auth.controller");
 
 const {
@@ -20,6 +21,7 @@ const {
    loginValidator,  
    changePasswordValidator, 
    forgotPasswordValidator,
+   resetPasswordValidator,
   } = require("../validators/auth.validator");
 
 const validate = require("../middleware/validate.middleware");
@@ -77,6 +79,13 @@ router.post(
   forgotPasswordValidator,
   validate,
   forgotPassword
+);
+
+router.put(
+  "/reset-password/:token",
+  resetPasswordValidator,
+  validate,
+  resetPassword
 );
 
 module.exports = router;

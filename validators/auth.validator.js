@@ -57,9 +57,18 @@ const forgotPasswordValidator = [
     .withMessage("Please provide a valid email"),
 ];
 
+const resetPasswordValidator = [
+  body("password")
+    .notEmpty()
+    .withMessage("Password is required")
+    .isLength({ min: 6 })
+    .withMessage("Password must be at least 6 characters"),
+];
+
 module.exports = {
   registerValidator,
   loginValidator,
   changePasswordValidator,
   forgotPasswordValidator,
+  resetPasswordValidator,
 };

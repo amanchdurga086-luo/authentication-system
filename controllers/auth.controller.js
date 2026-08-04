@@ -4,9 +4,10 @@ const jwt = require("jsonwebtoken");
 const asyncHandler = require("../utils/asyncHandler");
 const ApiError = require("../utils/ApiError");
 const ApiResponse = require("../utils/ApiResponse");
-const sendToken = require("../utils/sendToken");
 
+const sendToken = require("../utils/sendToken");
 const sendEmail = require("../utils/sendEmail");
+const crypto = require("crypto");
 
 
 const registerUser = asyncHandler(async (req, res) => {
@@ -215,6 +216,46 @@ const forgotPassword = asyncHandler(async (req, res) => {
 });
 
 
+const resetPassword = asyncHandler(async (req, res) => {
+  const { password } = req.body;
+
+  // Hash incoming token
+  const hashedToken = crypto
+    .createHash("sha256")
+    .update(req.params.token)
+    .digest("hex");
+
+  // Find matching user
+  const user = await User.findOne({
+    passwordResetToken: hashedToken,
+    passwordResetExpires: {
+      $gt: Date.now(),
+    },
+  });
+
+  if (!user) {
+    throw new ApiError(400, "Reset token is invalid or has expired");
+  }
+
+  // Set new password
+  user.password = password;
+
+  // Remove reset fields
+  user.passwordResetToken = undefined;
+  user.passwordResetExpires = undefined;
+
+  // Save user
+  await user.save();
+
+  res.status(200).json(
+    new ApiResponse(
+      200,
+      "Password reset successful"
+    )
+  );
+});
+
+
 module.exports = {
   registerUser,
   loginUser,
@@ -224,4 +265,5 @@ module.exports = {
   logoutUser,
   changePassword,
   forgotPassword,
+  resetPassword,
 };
