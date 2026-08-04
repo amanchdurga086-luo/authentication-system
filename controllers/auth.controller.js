@@ -256,6 +256,70 @@ const resetPassword = asyncHandler(async (req, res) => {
 });
 
 
+const sendVerificationEmail = asyncHandler(async (req, res) => {
+
+    const user = await User.findById(req.user._id);
+
+    if (!user) {
+        throw new ApiError(404, "User not found");
+    }
+
+    if (user.isVerified) {
+        throw new ApiError(
+            400,
+            "Email is already verified"
+        );
+    }
+
+    // Generate verification token
+    const verificationToken =
+        user.generateEmailVerificationToken();
+
+    console.log("Verification Token:", verificationToken);
+    // Save token
+    await user.save({
+        validateBeforeSave: false,
+    });
+
+    const verificationUrl =
+        `${req.protocol}://${req.get("host")}/api/v1/auth/verify-email/${verificationToken}`;
+
+    try {
+
+        await sendEmail({
+            email: user.email,
+            subject: "Verify Your Email",
+            message:`Click the link below to verify your email:
+                    ${verificationUrl}
+                    This link expires in 24 hours.`,
+        });
+
+        res.status(200).json(
+            new ApiResponse(
+                200,
+                "Verification email sent successfully"
+            )
+        );
+
+    } catch (error) {
+
+        // Rollback
+        user.emailVerificationToken = undefined;
+        user.emailVerificationExpires = undefined;
+
+        await user.save({
+            validateBeforeSave: false,
+        });
+
+        throw new ApiError(
+            500,
+            "Email could not be sent. Please try again later."
+        );
+    }
+
+});
+
+
 module.exports = {
   registerUser,
   loginUser,
@@ -266,4 +330,5 @@ module.exports = {
   changePassword,
   forgotPassword,
   resetPassword,
+  sendVerificationEmail,
 };

@@ -14,6 +14,7 @@ const {
     changePassword,
     forgotPassword,
     resetPassword,
+    sendVerificationEmail,
   } = require("../controllers/auth.controller");
 
 const {
@@ -86,6 +87,12 @@ router.put(
   resetPasswordValidator,
   validate,
   resetPassword
+);
+
+router.post(
+  "/send-verification-email",
+  authenticate,
+  sendVerificationEmail
 );
 
 module.exports = router;
