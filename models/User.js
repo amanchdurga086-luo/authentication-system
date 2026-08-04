@@ -98,6 +98,22 @@ userSchema.methods.generatePasswordResetToken = function () {
   return resetToken;
 };
 
+userSchema.methods.generateEmailVerificationToken = function () {
+  // Generate random token
+  const verificationToken = crypto.randomBytes(32).toString("hex");
+
+  // Store hashed token
+  this.emailVerificationToken = crypto
+    .createHash("sha256")
+    .update(verificationToken)
+    .digest("hex");
+
+  // Token expires in 24 hours
+  this.emailVerificationExpires = Date.now() + 24 * 60 * 60 * 1000;
+
+  return verificationToken;
+};
+
 const User = mongoose.model("User", userSchema);
 
 module.exports = User;
