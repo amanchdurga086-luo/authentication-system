@@ -6,15 +6,16 @@ const router = express.Router();
 
 const { 
   registerUser,
-   loginUser ,
-   getProfile,
-    adminDashboard,
-    getCurrentUser,
-    logoutUser,
-    changePassword,
-    forgotPassword,
-    resetPassword,
-    sendVerificationEmail,
+  loginUser ,
+  getProfile,
+  adminDashboard,
+  getCurrentUser,
+  logoutUser,
+  changePassword,
+  forgotPassword,
+  resetPassword,
+  sendVerificationEmail,
+  verifyEmail,
   } = require("../controllers/auth.controller");
 
 const {
@@ -93,6 +94,11 @@ router.post(
   "/send-verification-email",
   authenticate,
   sendVerificationEmail
+);
+
+router.get(
+  "/verify-email/:token",
+  verifyEmail
 );
 
 module.exports = router;

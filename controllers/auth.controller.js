@@ -319,6 +319,46 @@ const sendVerificationEmail = asyncHandler(async (req, res) => {
 
 });
 
+const verifyEmail = asyncHandler(async (req, res) => {
+  // Hash the token received from the URL
+  const hashedToken = crypto
+    .createHash("sha256")
+    .update(req.params.token)
+    .digest("hex");
+
+  // Find user with matching token and valid expiry
+  const user = await User.findOne({
+    emailVerificationToken: hashedToken,
+    emailVerificationExpires: {
+      $gt: Date.now(),
+    },
+  });
+
+  if (!user) {
+    throw new ApiError(
+      400,
+      "Verification token is invalid or has expired"
+    );
+  }
+
+  // Mark email as verified
+  user.isVerified = true;
+
+  // Remove verification token
+  user.emailVerificationToken = undefined;
+  user.emailVerificationExpires = undefined;
+
+  // Save changes
+  await user.save();
+
+  res.status(200).json(
+    new ApiResponse(
+      200,
+      "Email verified successfully"
+    )
+  );
+});
+
 
 module.exports = {
   registerUser,
@@ -331,4 +371,5 @@ module.exports = {
   forgotPassword,
   resetPassword,
   sendVerificationEmail,
+  verifyEmail,
 };
