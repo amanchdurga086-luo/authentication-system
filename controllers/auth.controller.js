@@ -8,6 +8,7 @@ const ApiResponse = require("../utils/ApiResponse");
 const sendToken = require("../utils/sendToken");
 const sendEmail = require("../utils/sendEmail");
 const crypto = require("crypto");
+const Session = require("../models/Session");
 
 
 const registerUser = asyncHandler(async (req, res) => {
@@ -45,28 +46,83 @@ const registerUser = asyncHandler(async (req, res) => {
 const loginUser = asyncHandler(async (req, res) => {
   const { email, password } = req.body;
 
-  // Find user with password
+  // Find user and explicitly include password
   const user = await User.findOne({ email }).select("+password");
 
   if (!user) {
     throw new ApiError(401, "Invalid email or password");
   }
 
-  // Compare password
-  const isMatched = await user.comparePassword(password);
+  // Verify password
+  const isPasswordMatched = await user.comparePassword(password);
 
-  if (!isMatched) {
+  if (!isPasswordMatched) {
     throw new ApiError(401, "Invalid email or password");
   }
 
-  // generate token and send response
-  sendToken(
-    user,
-    200,
-    res,
-    "Login successful"
+  // Generate short-lived access token
+  const accessToken = jwt.sign(
+    {
+      id: user._id,
+      role: user.role,
+    },
+    process.env.JWT_SECRET,
+    {
+      expiresIn: process.env.ACCESS_TOKEN_EXPIRES_IN,
+    }
   );
 
+  // Generate long-lived random refresh token
+  const refreshToken = crypto
+    .randomBytes(64)
+    .toString("hex");
+
+  // Hash refresh token before storing it
+  const refreshTokenHash = crypto
+    .createHash("sha256")
+    .update(refreshToken)
+    .digest("hex");
+
+  // Refresh token expires in 7 days
+  const refreshTokenExpiresAt = new Date(
+    Date.now() + 7 * 24 * 60 * 60 * 1000
+  );
+
+  // Create server-side session
+  await Session.create({
+    user: user._id,
+    refreshTokenHash,
+    expiresAt: refreshTokenExpiresAt,
+  });
+
+  // Store access token in HttpOnly cookie
+  res.cookie("accessToken", accessToken, {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === "production",
+    sameSite: "strict",
+    maxAge: 15 * 60 * 1000,
+  });
+
+  // Store refresh token in HttpOnly cookie
+  res.cookie("refreshToken", refreshToken, {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === "production",
+    sameSite: "strict",
+    maxAge: 7 * 24 * 60 * 60 * 1000,
+  });
+
+  res.status(200).json(
+    new ApiResponse(
+      200,
+      "Login successful",
+      {
+        id: user._id,
+        name: user.name,
+        email: user.email,
+        role: user.role,
+      }
+    )
+  );
 });
 
 
