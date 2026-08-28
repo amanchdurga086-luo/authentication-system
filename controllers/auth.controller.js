@@ -416,7 +416,6 @@ const verifyEmail = asyncHandler(async (req, res) => {
 });
 
 const refreshToken = asyncHandler(async (req, res) => {
-  // Get refresh token from HttpOnly cookie
   const refreshToken = req.cookies.refreshToken;
 
   if (!refreshToken) {
@@ -426,7 +425,7 @@ const refreshToken = asyncHandler(async (req, res) => {
     );
   }
 
-  // Hash received refresh token
+  // Hash the incoming refresh token
   const refreshTokenHash = crypto
     .createHash("sha256")
     .update(refreshToken)
@@ -444,7 +443,7 @@ const refreshToken = asyncHandler(async (req, res) => {
     );
   }
 
-  // Check if session was revoked
+  // Check revocation
   if (session.revokedAt) {
     throw new ApiError(
       401,
@@ -460,7 +459,7 @@ const refreshToken = asyncHandler(async (req, res) => {
     );
   }
 
-  // Find associated user
+  // Find user
   const user = await User.findById(session.user);
 
   if (!user) {
@@ -482,6 +481,22 @@ const refreshToken = asyncHandler(async (req, res) => {
     }
   );
 
+  // Generate new refresh token
+  const newRefreshToken = crypto
+    .randomBytes(64)
+    .toString("hex");
+
+  // Hash new refresh token
+  const newRefreshTokenHash = crypto
+    .createHash("sha256")
+    .update(newRefreshToken)
+    .digest("hex");
+
+  // Rotate refresh token
+  session.refreshTokenHash = newRefreshTokenHash;
+
+  await session.save();
+
   // Send new access token
   res.cookie("accessToken", accessToken, {
     httpOnly: true,
@@ -490,14 +505,21 @@ const refreshToken = asyncHandler(async (req, res) => {
     maxAge: 15 * 60 * 1000,
   });
 
+  // Send new refresh token
+  res.cookie("refreshToken", newRefreshToken, {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === "production",
+    sameSite: "strict",
+    maxAge: 7 * 24 * 60 * 60 * 1000,
+  });
+
   res.status(200).json(
     new ApiResponse(
       200,
-      "Access token refreshed successfully"
+      "Tokens refreshed successfully"
     )
   );
 });
-
 
 module.exports = {
   registerUser,
