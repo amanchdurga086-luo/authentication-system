@@ -415,6 +415,89 @@ const verifyEmail = asyncHandler(async (req, res) => {
   );
 });
 
+const refreshToken = asyncHandler(async (req, res) => {
+  // Get refresh token from HttpOnly cookie
+  const refreshToken = req.cookies.refreshToken;
+
+  if (!refreshToken) {
+    throw new ApiError(
+      401,
+      "Refresh token is required"
+    );
+  }
+
+  // Hash received refresh token
+  const refreshTokenHash = crypto
+    .createHash("sha256")
+    .update(refreshToken)
+    .digest("hex");
+
+  // Find session
+  const session = await Session.findOne({
+    refreshTokenHash,
+  });
+
+  if (!session) {
+    throw new ApiError(
+      401,
+      "Invalid refresh token"
+    );
+  }
+
+  // Check if session was revoked
+  if (session.revokedAt) {
+    throw new ApiError(
+      401,
+      "Refresh token has been revoked"
+    );
+  }
+
+  // Check expiration
+  if (session.expiresAt <= new Date()) {
+    throw new ApiError(
+      401,
+      "Refresh token has expired"
+    );
+  }
+
+  // Find associated user
+  const user = await User.findById(session.user);
+
+  if (!user) {
+    throw new ApiError(
+      401,
+      "User associated with session no longer exists"
+    );
+  }
+
+  // Generate new access token
+  const accessToken = jwt.sign(
+    {
+      id: user._id,
+      role: user.role,
+    },
+    process.env.JWT_SECRET,
+    {
+      expiresIn: process.env.ACCESS_TOKEN_EXPIRES_IN,
+    }
+  );
+
+  // Send new access token
+  res.cookie("accessToken", accessToken, {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === "production",
+    sameSite: "strict",
+    maxAge: 15 * 60 * 1000,
+  });
+
+  res.status(200).json(
+    new ApiResponse(
+      200,
+      "Access token refreshed successfully"
+    )
+  );
+});
+
 
 module.exports = {
   registerUser,
@@ -428,4 +511,5 @@ module.exports = {
   resetPassword,
   sendVerificationEmail,
   verifyEmail,
+  refreshToken,
 };
