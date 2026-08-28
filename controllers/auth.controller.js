@@ -425,18 +425,38 @@ const refreshToken = asyncHandler(async (req, res) => {
     );
   }
 
-  // Hash the incoming refresh token
   const refreshTokenHash = crypto
     .createHash("sha256")
     .update(refreshToken)
     .digest("hex");
 
-  // Find session
+  // Find the currently active token
   const session = await Session.findOne({
     refreshTokenHash,
   });
 
+  // Token is not the current token.
+  // Check whether it was previously used.
   if (!session) {
+    const reusedSession = await Session.findOne({
+      previousRefreshTokenHash: refreshTokenHash,
+    });
+
+    if (reusedSession) {
+      // Possible token theft/reuse
+      reusedSession.revokedAt = new Date();
+
+      await reusedSession.save();
+
+      console.warn(
+        "Refresh token reuse detected",
+        {
+          sessionId: reusedSession._id,
+          userId: reusedSession.user,
+        }
+      );
+    }
+
     throw new ApiError(
       401,
       "Invalid refresh token"
@@ -492,12 +512,16 @@ const refreshToken = asyncHandler(async (req, res) => {
     .update(newRefreshToken)
     .digest("hex");
 
-  // Rotate refresh token
-  session.refreshTokenHash = newRefreshTokenHash;
+  // Rotate tokens
+  session.previousRefreshTokenHash =
+    session.refreshTokenHash;
+
+  session.refreshTokenHash =
+    newRefreshTokenHash;
 
   await session.save();
 
-  // Send new access token
+  // New access token
   res.cookie("accessToken", accessToken, {
     httpOnly: true,
     secure: process.env.NODE_ENV === "production",
@@ -505,7 +529,7 @@ const refreshToken = asyncHandler(async (req, res) => {
     maxAge: 15 * 60 * 1000,
   });
 
-  // Send new refresh token
+  // New refresh token
   res.cookie("refreshToken", newRefreshToken, {
     httpOnly: true,
     secure: process.env.NODE_ENV === "production",

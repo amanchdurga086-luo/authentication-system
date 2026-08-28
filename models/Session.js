@@ -23,6 +23,12 @@ const sessionSchema = new mongoose.Schema(
       type: Date,
       default: null,
     },
+
+    previousRefreshTokenHash: {
+      type: String,
+      default: null,
+    },
+    
   },
   {
     timestamps: true,
