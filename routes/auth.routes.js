@@ -16,7 +16,7 @@ const {
   resetPassword,
   sendVerificationEmail,
   verifyEmail,
-  refreshToken,
+  refreshAccessToken,
   } = require("../controllers/auth.controller");
 
 const {
@@ -104,7 +104,7 @@ router.get(
 
 router.post(
   "/refresh-token",
-  refreshToken
+  refreshAccessToken
 );
 
 module.exports = router;

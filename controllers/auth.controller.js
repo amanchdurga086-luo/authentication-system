@@ -11,6 +11,7 @@ const crypto = require("crypto");
 const Session = require("../models/Session");
 const RefreshToken = require("../models/RefreshToken");
 
+
 const registerUser = asyncHandler(async (req, res) => {
   const { name, email, password } = req.body;
 
@@ -436,135 +437,148 @@ const verifyEmail = asyncHandler(async (req, res) => {
   );
 });
 
-const refreshToken = asyncHandler(async (req, res) => {
-  const refreshToken = req.cookies.refreshToken;
+const refreshAccessToken = asyncHandler(
+  async (req, res) => {
+    const refreshToken =
+      req.cookies.refreshToken;
 
-  if (!refreshToken) {
-    throw new ApiError(
-      401,
-      "Refresh token is required"
-    );
-  }
-
-  const refreshTokenHash = crypto
-    .createHash("sha256")
-    .update(refreshToken)
-    .digest("hex");
-
-  // Find the currently active token
-  const session = await Session.findOne({
-    refreshTokenHash,
-  });
-
-  // Token is not the current token.
-  // Check whether it was previously used.
-  if (!session) {
-    const reusedSession = await Session.findOne({
-      previousRefreshTokenHash: refreshTokenHash,
-    });
-
-    if (reusedSession) {
-      // Possible token theft/reuse
-      reusedSession.revokedAt = new Date();
-
-      await reusedSession.save();
-
-      console.warn(
-        "Refresh token reuse detected",
-        {
-          sessionId: reusedSession._id,
-          userId: reusedSession.user,
-        }
+    if (!refreshToken) {
+      throw new ApiError(
+        401,
+        "Refresh token is required"
       );
     }
 
-    throw new ApiError(
-      401,
-      "Invalid refresh token"
-    );
-  }
+    // Hash incoming refresh token
+    const tokenHash = crypto
+      .createHash("sha256")
+      .update(refreshToken)
+      .digest("hex");
 
-  // Check revocation
-  if (session.revokedAt) {
-    throw new ApiError(
-      401,
-      "Refresh token has been revoked"
-    );
-  }
+    // Atomically consume refresh token
+    const tokenRecord =
+      await RefreshToken.findOneAndUpdate(
+        {
+          tokenHash,
+          usedAt: null,
+          revokedAt: null,
+        },
+        {
+          $set: {
+            usedAt: new Date(),
+          },
+        },
+        {
+          new: true,
+        }
+      );
 
-  // Check expiration
-  if (session.expiresAt <= new Date()) {
-    throw new ApiError(
-      401,
-      "Refresh token has expired"
-    );
-  }
-
-  // Find user
-  const user = await User.findById(session.user);
-
-  if (!user) {
-    throw new ApiError(
-      401,
-      "User associated with session no longer exists"
-    );
-  }
-
-  // Generate new access token
-  const accessToken = jwt.sign(
-    {
-      id: user._id,
-      role: user.role,
-    },
-    process.env.JWT_SECRET,
-    {
-      expiresIn: process.env.ACCESS_TOKEN_EXPIRES_IN,
+    if (!tokenRecord) {
+      throw new ApiError(
+        401,
+        "Invalid or already used refresh token"
+      );
     }
-  );
 
-  // Generate new refresh token
-  const newRefreshToken = crypto
-    .randomBytes(64)
-    .toString("hex");
+    // Find session
+    const session =
+      await Session.findById(
+        tokenRecord.session
+      );
 
-  // Hash new refresh token
-  const newRefreshTokenHash = crypto
-    .createHash("sha256")
-    .update(newRefreshToken)
-    .digest("hex");
+    if (!session) {
+      throw new ApiError(
+        401,
+        "Session not found"
+      );
+    }
 
-  // Rotate tokens
-  session.previousRefreshTokenHash =
-    session.refreshTokenHash;
+    // Check session revocation
+    if (session.revokedAt) {
+      throw new ApiError(
+        401,
+        "Session has been revoked"
+      );
+    }
 
-  session.refreshTokenHash =
-    newRefreshTokenHash;
+    // Check session expiration
+    if (session.expiresAt <= new Date()) {
+      throw new ApiError(
+        401,
+        "Session has expired"
+      );
+    }
 
-  await session.save();
+    // Find user
+    const user = await User.findById(
+      session.user
+    );
 
-  // New access token
-  res.cookie("accessToken", accessToken, {
-    httpOnly: true,
-    secure: process.env.NODE_ENV === "production",
-    sameSite: "strict",
-    maxAge: 15 * 60 * 1000,
-  });
+    if (!user) {
+      throw new ApiError(
+        401,
+        "User associated with session no longer exists"
+      );
+    }
 
-  // New refresh token
-  res.cookie("refreshToken", newRefreshToken, {
-    httpOnly: true,
-    secure: process.env.NODE_ENV === "production",
-    sameSite: "strict",
-    maxAge: 7 * 24 * 60 * 60 * 1000,
-  });
+    // Generate new access token
+    const accessToken = jwt.sign(
+      {
+        id: user._id,
+        role: user.role,
+      },
+      process.env.JWT_SECRET,
+      {
+        expiresIn:
+          process.env.ACCESS_TOKEN_EXPIRES_IN,
+      }
+    );
 
-  res.status(200).json(
-    new ApiResponse(
-      200,
-      "Tokens refreshed successfully"
-    )
-  );
-});
+    // Generate new refresh token
+    const newRefreshToken =
+      crypto.randomBytes(64).toString("hex");
+
+    // Hash new refresh token
+    const newTokenHash = crypto
+      .createHash("sha256")
+      .update(newRefreshToken)
+      .digest("hex");
+
+    // Create new refresh token record
+    await RefreshToken.create({
+      session: session._id,
+      tokenHash: newTokenHash,
+      tokenFamily: session.tokenFamily,
+      expiresAt: session.expiresAt,
+    });
+
+    // Set new access token
+    res.cookie("accessToken", accessToken, {
+      httpOnly: true,
+      secure:
+        process.env.NODE_ENV === "production",
+      sameSite: "strict",
+      maxAge: 15 * 60 * 1000,
+    });
+
+    // Set new refresh token
+    res.cookie("refreshToken", newRefreshToken, {
+      httpOnly: true,
+      secure:
+        process.env.NODE_ENV === "production",
+      sameSite: "strict",
+      maxAge:
+        7 * 24 * 60 * 60 * 1000,
+    });
+
+    res.status(200).json(
+      new ApiResponse(
+        200,
+        "Tokens refreshed successfully"
+      )
+    );
+  }
+);
 
 module.exports = {
   registerUser,
@@ -578,5 +592,5 @@ module.exports = {
   resetPassword,
   sendVerificationEmail,
   verifyEmail,
-  refreshToken,
+  refreshAccessToken,
 };
