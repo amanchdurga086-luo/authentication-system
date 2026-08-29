@@ -1,12 +1,18 @@
 const mongoose = require("mongoose");
 
-const sessionSchema = new mongoose.Schema(
+const refreshTokenSchema = new mongoose.Schema(
   {
-    user: {
+    session: {
       type: mongoose.Schema.Types.ObjectId,
-      ref: "User",
+      ref: "Session",
       required: true,
       index: true,
+    },
+
+    tokenHash: {
+      type: String,
+      required: true,
+      unique: true,
     },
 
     tokenFamily: {
@@ -15,23 +21,30 @@ const sessionSchema = new mongoose.Schema(
       index: true,
     },
 
+    usedAt: {
+      type: Date,
+      default: null,
+    },
+
     expiresAt: {
       type: Date,
       required: true,
+      index: true,
     },
 
     revokedAt: {
       type: Date,
       default: null,
     },
-
   },
-
   {
     timestamps: true,
   }
 );
 
-const Session = mongoose.model("Session", sessionSchema);
+const RefreshToken = mongoose.model(
+  "RefreshToken",
+  refreshTokenSchema
+);
 
-module.exports = Session;
+module.exports = RefreshToken;
