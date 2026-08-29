@@ -9,7 +9,7 @@ const sendToken = require("../utils/sendToken");
 const sendEmail = require("../utils/sendEmail");
 const crypto = require("crypto");
 const Session = require("../models/Session");
-
+const RefreshToken = require("../models/RefreshToken");
 
 const registerUser = asyncHandler(async (req, res) => {
   const { name, email, password } = req.body;
@@ -50,17 +50,24 @@ const loginUser = asyncHandler(async (req, res) => {
   const user = await User.findOne({ email }).select("+password");
 
   if (!user) {
-    throw new ApiError(401, "Invalid email or password");
+    throw new ApiError(
+      401,
+      "Invalid email or password"
+    );
   }
 
-  // Verify password
-  const isPasswordMatched = await user.comparePassword(password);
+  // Compare password
+  const isPasswordMatched =
+    await user.comparePassword(password);
 
   if (!isPasswordMatched) {
-    throw new ApiError(401, "Invalid email or password");
+    throw new ApiError(
+      401,
+      "Invalid email or password"
+    );
   }
 
-  // Generate short-lived access token
+  // Generate access token
   const accessToken = jwt.sign(
     {
       id: user._id,
@@ -72,41 +79,55 @@ const loginUser = asyncHandler(async (req, res) => {
     }
   );
 
-  // Generate long-lived random refresh token
+  // Generate refresh token
   const refreshToken = crypto
     .randomBytes(64)
     .toString("hex");
 
-  // Hash refresh token before storing it
+  // Hash refresh token
   const refreshTokenHash = crypto
     .createHash("sha256")
     .update(refreshToken)
     .digest("hex");
 
-  // Refresh token expires in 7 days
+  // Create token family
+  const tokenFamily = crypto.randomUUID();
+
+  // Refresh token expiry
   const refreshTokenExpiresAt = new Date(
-    Date.now() + 7 * 24 * 60 * 60 * 1000
+    Date.now() +
+      7 * 24 * 60 * 60 * 1000
   );
 
-  // Create server-side session
-  await Session.create({
+  // Create session
+  const session = await Session.create({
     user: user._id,
-    refreshTokenHash,
+    tokenFamily,
     expiresAt: refreshTokenExpiresAt,
   });
 
-  // Store access token in HttpOnly cookie
+  // Store refresh token record
+  await RefreshToken.create({
+    session: session._id,
+    tokenHash: refreshTokenHash,
+    tokenFamily,
+    expiresAt: refreshTokenExpiresAt,
+  });
+
+  // Access token cookie
   res.cookie("accessToken", accessToken, {
     httpOnly: true,
-    secure: process.env.NODE_ENV === "production",
+    secure:
+      process.env.NODE_ENV === "production",
     sameSite: "strict",
     maxAge: 15 * 60 * 1000,
   });
 
-  // Store refresh token in HttpOnly cookie
+  // Refresh token cookie
   res.cookie("refreshToken", refreshToken, {
     httpOnly: true,
-    secure: process.env.NODE_ENV === "production",
+    secure:
+      process.env.NODE_ENV === "production",
     sameSite: "strict",
     maxAge: 7 * 24 * 60 * 60 * 1000,
   });
