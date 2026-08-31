@@ -65,7 +65,6 @@ router.get(
 
 router.post(
   "/logout",
-  authenticate,
   logoutUser
 );
 

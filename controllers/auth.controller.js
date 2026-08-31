@@ -108,7 +108,7 @@ const loginUser = asyncHandler(async (req, res) => {
     expiresAt: refreshTokenExpiresAt,
   });
 
-  // Store refresh token record
+  // Store refresh token record in refresh token collection
   await RefreshToken.create({
     session: session._id,
     tokenHash: refreshTokenHash,
@@ -191,52 +191,58 @@ const getCurrentUser = asyncHandler(async (req, res) => {
   ));
 });
 
-const logoutUser = asyncHandler(async (req, res) => {
-  res.clearCookie("token", {
-    httpOnly: true,
-    secure: process.env.NODE_ENV === "production",
-    sameSite: "strict",
-  });
+const logoutUser = asyncHandler(
+  async (req, res) => {
+    const refreshToken =
+      req.cookies.refreshToken;
 
-  res.status(200).json(
-    new ApiResponse(
-      200,
-      "Logged out successfully"
-    )
-  );
-});
+    if (refreshToken) {
+      const tokenHash = crypto
+        .createHash("sha256")
+        .update(refreshToken)
+        .digest("hex");
 
+      const tokenRecord =
+        await RefreshToken.findOne({
+          tokenHash,
+        });
 
-const changePassword = asyncHandler(async (req, res) => {
-    const { oldPassword, newPassword } = req.body;
+      if (tokenRecord) {
+        const session =
+          await Session.findById(
+            tokenRecord.session
+          );
 
-    // Fetch user with password
-    const user = await User.findById(req.user._id).select("+password");
+        if (session && !session.revokedAt) {
+          session.revokedAt = new Date();
 
-    if (!user) {
-        throw new ApiError(404, "User not found");
+          await session.save();
+        }
+      }
     }
 
-    // Verify old password
-    const isMatch = await user.comparePassword(oldPassword);
+    res.clearCookie("accessToken", {
+      httpOnly: true,
+      secure:
+        process.env.NODE_ENV === "production",
+      sameSite: "strict",
+    });
 
-    if (!isMatch) {
-        throw new ApiError(401, "Old password is incorrect");
-    }
-
-    // Update password
-    user.password = newPassword;
-
-    // Triggers pre("save") middleware and hashes the password
-    await user.save();
+    res.clearCookie("refreshToken", {
+      httpOnly: true,
+      secure:
+        process.env.NODE_ENV === "production",
+      sameSite: "strict",
+    });
 
     res.status(200).json(
-        new ApiResponse(
-            200,
-            "Password changed successfully"
-        )
+      new ApiResponse(
+        200,
+        "Logout successful"
+      )
     );
-});
+  }
+);
 
 const forgotPassword = asyncHandler(async (req, res) => {
   const { email } = req.body;
