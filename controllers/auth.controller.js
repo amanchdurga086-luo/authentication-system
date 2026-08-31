@@ -10,6 +10,7 @@ const sendEmail = require("../utils/sendEmail");
 const crypto = require("crypto");
 const Session = require("../models/Session");
 const RefreshToken = require("../models/RefreshToken");
+const mongoose = require("mongoose");
 
 
 const registerUser = asyncHandler(async (req, res) => {
@@ -437,6 +438,7 @@ const verifyEmail = asyncHandler(async (req, res) => {
   );
 });
 
+
 const refreshAccessToken = asyncHandler(
   async (req, res) => {
     const refreshToken =
@@ -449,134 +451,167 @@ const refreshAccessToken = asyncHandler(
       );
     }
 
-    // Hash incoming refresh token
     const tokenHash = crypto
       .createHash("sha256")
       .update(refreshToken)
       .digest("hex");
 
-    // Atomically consume refresh token
-    const tokenRecord =
-      await RefreshToken.findOneAndUpdate(
-        {
-          tokenHash,
-          usedAt: null,
-          revokedAt: null,
-        },
-        {
-          $set: {
-            usedAt: new Date(),
+    const dbSession =
+      await mongoose.startSession();
+
+    try {
+      dbSession.startTransaction();
+
+      // Atomically consume the refresh token
+      const now = new Date();
+
+      const tokenRecord =
+        await RefreshToken.findOneAndUpdate(
+          {
+            tokenHash,
+            //this condition what prevents double consumption.
+            usedAt: null,
+            revokedAt: null,
+            expiresAt: {
+              $gt: now,
+            },
           },
-        },
+          {
+            $set: {
+              usedAt: now,
+            },
+          },
+          {
+            new: true,
+            session: dbSession,
+          }
+        );
+
+      if (!tokenRecord) {
+        throw new ApiError(
+          401,
+          "Invalid or already used refresh token"
+        );
+      }
+
+      // Find the associated application session
+      const session =
+        await Session.findById(
+          tokenRecord.session
+        ).session(dbSession);
+
+      if (!session) {
+        throw new ApiError(
+          401,
+          "Session not found"
+        );
+      }
+
+      // Check session revocation
+      if (session.revokedAt) {
+        throw new ApiError(
+          401,
+          "Session has been revoked"
+        );
+      }
+
+      // Check session expiration
+      if (session.expiresAt <= new Date()) {
+        throw new ApiError(
+          401,
+          "Session has expired"
+        );
+      }
+
+      // Find user
+      const user = await User.findById(
+        session.user
+      ).session(dbSession);
+
+      if (!user) {
+        throw new ApiError(
+          401,
+          "User associated with session no longer exists"
+        );
+      }
+
+      // Generate new refresh token
+      const newRefreshToken =
+        crypto.randomBytes(64).toString("hex");
+
+      // Hash new refresh token
+      const newTokenHash = crypto
+        .createHash("sha256")
+        .update(newRefreshToken)
+        .digest("hex");
+
+      // Create new refresh-token record
+      await RefreshToken.create(
+        [
+          {
+            session: session._id,
+            tokenHash: newTokenHash,
+            tokenFamily: session.tokenFamily,
+            expiresAt: session.expiresAt,
+          },
+        ],
         {
-          new: true,
+          session: dbSession,
         }
       );
 
-    if (!tokenRecord) {
-      throw new ApiError(
-        401,
-        "Invalid or already used refresh token"
+      // Generate new access token
+      const accessToken = jwt.sign(
+        {
+          id: user._id,
+          role: user.role,
+        },
+        process.env.JWT_SECRET,
+        {
+          expiresIn:
+            process.env.ACCESS_TOKEN_EXPIRES_IN,
+        }
       );
+
+      // Commit database changes
+      await dbSession.commitTransaction();
+
+      // Set new access token cookie
+      res.cookie("accessToken", accessToken, {
+        httpOnly: true,
+        secure:
+          process.env.NODE_ENV === "production",
+        sameSite: "strict",
+        maxAge: 15 * 60 * 1000,
+      });
+
+      // Set new refresh token cookie
+      res.cookie(
+        "refreshToken",
+        newRefreshToken,
+        {
+          httpOnly: true,
+          secure:
+            process.env.NODE_ENV === "production",
+          sameSite: "strict",
+          maxAge:
+            7 * 24 * 60 * 60 * 1000,
+        }
+      );
+
+      res.status(200).json(
+        new ApiResponse(
+          200,
+          "Tokens refreshed successfully"
+        )
+      );
+    } catch (error) {
+      await dbSession.abortTransaction();
+
+      throw error;
+    } finally {
+      await dbSession.endSession();
     }
-
-    // Find session
-    const session =
-      await Session.findById(
-        tokenRecord.session
-      );
-
-    if (!session) {
-      throw new ApiError(
-        401,
-        "Session not found"
-      );
-    }
-
-    // Check session revocation
-    if (session.revokedAt) {
-      throw new ApiError(
-        401,
-        "Session has been revoked"
-      );
-    }
-
-    // Check session expiration
-    if (session.expiresAt <= new Date()) {
-      throw new ApiError(
-        401,
-        "Session has expired"
-      );
-    }
-
-    // Find user
-    const user = await User.findById(
-      session.user
-    );
-
-    if (!user) {
-      throw new ApiError(
-        401,
-        "User associated with session no longer exists"
-      );
-    }
-
-    // Generate new access token
-    const accessToken = jwt.sign(
-      {
-        id: user._id,
-        role: user.role,
-      },
-      process.env.JWT_SECRET,
-      {
-        expiresIn:
-          process.env.ACCESS_TOKEN_EXPIRES_IN,
-      }
-    );
-
-    // Generate new refresh token
-    const newRefreshToken =
-      crypto.randomBytes(64).toString("hex");
-
-    // Hash new refresh token
-    const newTokenHash = crypto
-      .createHash("sha256")
-      .update(newRefreshToken)
-      .digest("hex");
-
-    // Create new refresh token record
-    await RefreshToken.create({
-      session: session._id,
-      tokenHash: newTokenHash,
-      tokenFamily: session.tokenFamily,
-      expiresAt: session.expiresAt,
-    });
-
-    // Set new access token
-    res.cookie("accessToken", accessToken, {
-      httpOnly: true,
-      secure:
-        process.env.NODE_ENV === "production",
-      sameSite: "strict",
-      maxAge: 15 * 60 * 1000,
-    });
-
-    // Set new refresh token
-    res.cookie("refreshToken", newRefreshToken, {
-      httpOnly: true,
-      secure:
-        process.env.NODE_ENV === "production",
-      sameSite: "strict",
-      maxAge:
-        7 * 24 * 60 * 60 * 1000,
-    });
-
-    res.status(200).json(
-      new ApiResponse(
-        200,
-        "Tokens refreshed successfully"
-      )
-    );
   }
 );
 
