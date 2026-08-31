@@ -488,9 +488,42 @@ const refreshAccessToken = asyncHandler(
         );
 
       if (!tokenRecord) {
+        const existingToken =
+          await RefreshToken.findOne({
+            tokenHash,
+          }).session(dbSession);
+
+        if (existingToken?.usedAt) {
+          const compromisedSession =
+            await Session.findById(
+              existingToken.session
+            ).session(dbSession);
+
+          if (compromisedSession) {
+            compromisedSession.revokedAt =
+              new Date();
+
+            await compromisedSession.save({
+              session: dbSession,
+            });
+
+            console.warn(
+              "Refresh token reuse detected",
+              {
+                sessionId:
+                  compromisedSession._id,
+                userId:
+                  compromisedSession.user,
+                tokenFamily:
+                  existingToken.tokenFamily,
+              }
+            );
+          }
+        }
+
         throw new ApiError(
           401,
-          "Invalid or already used refresh token"
+          "Invalid refresh token"
         );
       }
 
