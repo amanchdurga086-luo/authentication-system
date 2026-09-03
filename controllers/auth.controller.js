@@ -244,6 +244,38 @@ const logoutUser = asyncHandler(
   }
 );
 
+const changePassword = asyncHandler(async (req, res) => {
+    const { oldPassword, newPassword } = req.body;
+
+    // Fetch user with password
+    const user = await User.findById(req.user._id).select("+password");
+
+    if (!user) {
+        throw new ApiError(404, "User not found");
+    }
+
+    // Verify old password
+    const isMatch = await user.comparePassword(oldPassword);
+
+    if (!isMatch) {
+        throw new ApiError(401, "Old password is incorrect");
+    }
+
+    // Update password
+    user.password = newPassword;
+
+    // Triggers pre("save") middleware and hashes the password
+    await user.save();
+
+    res.status(200).json(
+        new ApiResponse(
+            200,
+            "Password changed successfully"
+        )
+    );
+});
+
+
 const forgotPassword = asyncHandler(async (req, res) => {
   const { email } = req.body;
 
@@ -525,6 +557,16 @@ const refreshAccessToken = asyncHandler(
               }
             );
           }
+
+          // Persist the security action
+          await dbSession.commitTransaction();
+
+          // Request is handled here.
+          return res.status(401).json({
+            success: false,
+            message: "Invalid refresh token",
+          });
+
         }
 
         throw new ApiError(
@@ -644,10 +686,13 @@ const refreshAccessToken = asyncHandler(
           "Tokens refreshed successfully"
         )
       );
-    } catch (error) {
-      await dbSession.abortTransaction();
 
+    } catch (error) {
+      if (dbSession.inTransaction()) {
+        await dbSession.abortTransaction();
+      }
       throw error;
+
     } finally {
       await dbSession.endSession();
     }
