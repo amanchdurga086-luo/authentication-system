@@ -21,8 +21,6 @@ app.use(
 
 app.use("/api/v1/auth", authRoutes);
 
-app.use(errorHandler);
-
 app.get("/", (req, res) => {
   res.status(200).json({
     success: true,
@@ -30,5 +28,6 @@ app.get("/", (req, res) => {
   });
 });
 
+app.use(errorHandler);
 
 module.exports = app;

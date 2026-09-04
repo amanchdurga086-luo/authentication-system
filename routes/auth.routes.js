@@ -9,7 +9,6 @@ const {
   loginUser ,
   getProfile,
   adminDashboard,
-  getCurrentUser,
   logoutUser,
   changePassword,
   forgotPassword,
@@ -58,14 +57,7 @@ router.get(
     adminDashboard
 );
 
-router.get(
-  "/me",
-  authenticate,
-  getCurrentUser
-);
 
-
-// Logout should generally be idempotent.
 router.post(
   "/logout",
   logoutUser
@@ -96,7 +88,7 @@ router.put(
 
 router.post(
   "/send-verification-email",
-  authenticate,
+  authenticate,  // we get user id from it that we need to send email verification link
   sendVerificationEmail
 );
 

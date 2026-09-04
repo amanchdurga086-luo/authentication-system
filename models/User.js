@@ -18,6 +18,7 @@ const userSchema = new mongoose.Schema(
       unique: true,
       lowercase: true,
       trim: true,
+      index: true,
     },
 
     password: {
@@ -67,14 +68,11 @@ userSchema.pre("save", async function () {
   if (!this.isModified("password")) {
     // Checks whether the password field has changed.
     return;
-    // return next();
   }
 
   const salt = await bcrypt.genSalt(10);
   this.password = await bcrypt.hash(this.password, salt);
 
-//   next();
-//   Passes control to the next middleware (or the actual save operation).
 });
 
 

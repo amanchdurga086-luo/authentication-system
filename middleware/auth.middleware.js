@@ -1,6 +1,8 @@
 const jwt = require("jsonwebtoken");
 const User = require("../models/User");
 const asyncHandler = require("../utils/asyncHandler");
+const ApiError = require("../utils/ApiError");
+
 
 // Middleware to protect routes and ensure the user is authenticated
 

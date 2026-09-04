@@ -5,7 +5,6 @@ const asyncHandler = require("../utils/asyncHandler");
 const ApiError = require("../utils/ApiError");
 const ApiResponse = require("../utils/ApiResponse");
 
-const sendToken = require("../utils/sendToken");
 const sendEmail = require("../utils/sendEmail");
 const crypto = require("crypto");
 const Session = require("../models/Session");
@@ -49,7 +48,8 @@ const loginUser = asyncHandler(async (req, res) => {
   const { email, password } = req.body;
 
   // Find user and explicitly include password
-  const user = await User.findOne({ email }).select("+password");
+  const user = await User.findOne({ email })
+    .select("+password");
 
   if (!user) {
     throw new ApiError(
@@ -77,7 +77,8 @@ const loginUser = asyncHandler(async (req, res) => {
     },
     process.env.JWT_SECRET,
     {
-      expiresIn: process.env.ACCESS_TOKEN_EXPIRES_IN,
+      expiresIn:
+        process.env.ACCESS_TOKEN_EXPIRES_IN,
     }
   );
 
@@ -101,22 +102,60 @@ const loginUser = asyncHandler(async (req, res) => {
       7 * 24 * 60 * 60 * 1000
   );
 
-  // Create session
-  const session = await Session.create({
-    user: user._id,
-    tokenFamily,
-    expiresAt: refreshTokenExpiresAt,
-  });
+  // Start MongoDB transaction
+  const dbSession =
+    await mongoose.startSession();
 
-  // Store refresh token record in refresh token collection
-  await RefreshToken.create({
-    session: session._id,
-    tokenHash: refreshTokenHash,
-    tokenFamily,
-    expiresAt: refreshTokenExpiresAt,
-  });
+  try {
+    dbSession.startTransaction();
 
-  // Access token cookie
+    // Create session
+    const [session] =
+      await Session.create(
+        [
+          {
+            user: user._id,
+            tokenFamily,
+            expiresAt:
+              refreshTokenExpiresAt,
+          },
+        ],
+        {
+          session: dbSession,
+        }
+      );
+
+    // Create refresh token record
+    await RefreshToken.create(
+      [
+        {
+          session: session._id,
+          tokenHash: refreshTokenHash,
+          tokenFamily,
+          expiresAt:
+            refreshTokenExpiresAt,
+        },
+      ],
+      {
+        session: dbSession,
+      }
+    );
+
+    // Commit database changes
+    await dbSession.commitTransaction();
+
+  } catch (error) {
+    if (dbSession.inTransaction()) {
+      await dbSession.abortTransaction();
+    }
+
+    throw error;
+
+  } finally {
+    await dbSession.endSession();
+  }
+
+  // Set access token cookie
   res.cookie("accessToken", accessToken, {
     httpOnly: true,
     secure:
@@ -125,16 +164,17 @@ const loginUser = asyncHandler(async (req, res) => {
     maxAge: 15 * 60 * 1000,
   });
 
-  // Refresh token cookie
+  // Set refresh token cookie
   res.cookie("refreshToken", refreshToken, {
     httpOnly: true,
     secure:
       process.env.NODE_ENV === "production",
     sameSite: "strict",
-    maxAge: 7 * 24 * 60 * 60 * 1000,
+    maxAge:
+      7 * 24 * 60 * 60 * 1000,
   });
 
-  res.status(200).json(
+  return res.status(200).json(
     new ApiResponse(
       200,
       "Login successful",
@@ -175,21 +215,6 @@ const adminDashboard = asyncHandler(async (req, res) => {
   ));
 });
 
-const getCurrentUser = asyncHandler(async (req, res) => {
-  res.status(200).json(
-    new ApiResponse(
-    200,
-    "Current user fetched successfully",
-    {
-      id: req.user._id,
-      name: req.user.name,
-      email: req.user.email,
-      role: req.user.role,
-      isVerified: req.user.isVerified,
-      createdAt: req.user.createdAt,
-    },
-  ));
-});
 
 const logoutUser = asyncHandler(async (req, res) => {
   const refreshToken = req.cookies.refreshToken;
@@ -271,34 +296,65 @@ const logoutAllDevices = asyncHandler(async (req, res) => {
 });
 
 const changePassword = asyncHandler(async (req, res) => {
-    const { oldPassword, newPassword } = req.body;
+  const { oldPassword, newPassword } = req.body;
 
-    // Fetch user with password
-    const user = await User.findById(req.user._id).select("+password");
+  // Fetch user with password
+  const user = await User.findById(req.user._id)
+    .select("+password");
 
-    if (!user) {
-        throw new ApiError(404, "User not found");
-    }
+  if (!user) {
+    throw new ApiError(404, "User not found");
+  }
 
-    // Verify old password
-    const isMatch = await user.comparePassword(oldPassword);
+  // Verify old password
+  const isMatch = await user.comparePassword(oldPassword);
 
-    if (!isMatch) {
-        throw new ApiError(401, "Old password is incorrect");
-    }
-
-    // Update password
-    user.password = newPassword;
-
-    // Triggers pre("save") middleware and hashes the password
-    await user.save();
-
-    res.status(200).json(
-        new ApiResponse(
-            200,
-            "Password changed successfully"
-        )
+  if (!isMatch) {
+    throw new ApiError(
+      401,
+      "Old password is incorrect"
     );
+  }
+
+  // Update password
+  user.password = newPassword;
+
+  // pre("save") middleware hashes the new password
+  await user.save();
+
+  // Revoke all existing sessions
+  await Session.updateMany(
+    {
+      user: req.user._id,
+      revokedAt: null,
+    },
+    {
+      $set: {
+        revokedAt: new Date(),
+      },
+    }
+  );
+
+  res.clearCookie("accessToken", {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === "production",
+    sameSite: "strict",
+  });
+
+  res.clearCookie("refreshToken", {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === "production",
+    sameSite: "strict",
+  });
+
+  return res.status(200).json(
+    new ApiResponse(
+      200,
+      "Password changed successfully"
+    )
+  );
+
+  
 });
 
 
@@ -325,8 +381,7 @@ const forgotPassword = asyncHandler(async (req, res) => {
   const resetUrl =
     `${req.protocol}://${req.get("host")}/api/v1/auth/reset-password/${resetToken}`;
 
-// ------------------------------------
-  console.log("Reset URL:", resetUrl);
+  // console.log("Reset URL:", resetUrl);
   try {
     await sendEmail({
       email: user.email,
@@ -390,6 +445,31 @@ const resetPassword = asyncHandler(async (req, res) => {
   // Save user
   await user.save();
 
+  await Session.updateMany(
+    {
+      user: user._id,
+      revokedAt: null,
+    },
+    {
+      $set: {
+        revokedAt: new Date(),
+      },
+    }
+  );
+
+  res.clearCookie("accessToken", {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === "production",
+    sameSite: "strict",
+  });
+
+  res.clearCookie("refreshToken", {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === "production",
+    sameSite: "strict",
+  });
+
+
   res.status(200).json(
     new ApiResponse(
       200,
@@ -418,8 +498,8 @@ const sendVerificationEmail = asyncHandler(async (req, res) => {
     const verificationToken =
         user.generateEmailVerificationToken();
 
-    console.log("Verification Token:", verificationToken);
-    // Save token
+    // console.log("Verification Token:", verificationToken);
+
     await user.save({
         validateBeforeSave: false,
     });
@@ -502,7 +582,7 @@ const verifyEmail = asyncHandler(async (req, res) => {
   );
 });
 
-
+// centralize
 const refreshAccessToken = asyncHandler(
   async (req, res) => {
     const refreshToken =
@@ -626,7 +706,7 @@ const refreshAccessToken = asyncHandler(
       if (session.expiresAt <= new Date()) {
         throw new ApiError(
           401,
-          "Session has expired"
+          "Invalid refresh token"
         );
       }
 
@@ -729,7 +809,6 @@ module.exports = {
   registerUser,
   loginUser,
   getProfile,
-  getCurrentUser,
   adminDashboard,
   logoutUser,
   changePassword,
