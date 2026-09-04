@@ -1,37 +1,30 @@
 const jwt = require("jsonwebtoken");
 const User = require("../models/User");
+const asyncHandler = require("../utils/asyncHandler");
 
-const authenticate = async (req, res, next) => {
-  try {
-    const token = req.cookies.token;
+// Middleware to protect routes and ensure the user is authenticated
 
-    if (!token) {
-      return res.status(401).json({
-        success: false,
-        message: "Authentication required",
-      });
-    }
+const authenticate = asyncHandler(async (req, res, next) => {
+  const token = req.cookies.accessToken;
 
-    const decoded = jwt.verify(token, process.env.JWT_SECRET);
-
-    const user = await User.findById(decoded.id);
-
-    if (!user) {
-      return res.status(401).json({
-        success: false,
-        message: "User no longer exists",
-      });
-    }
-// --------------------------------------
-    req.user = user;
-
-    next();
-  } catch (error) {
-    return res.status(401).json({
-      success: false,
-      message: "Invalid or expired token",
-    });
+  if (!token) {
+    throw new ApiError(401, "Not authenticated");
   }
-};
+
+  const decoded = jwt.verify(
+    token,
+    process.env.JWT_SECRET
+  );
+
+  const user = await User.findById(decoded.id);
+
+  if (!user) {
+    throw new ApiError(401, "User not found");
+  }
+
+  req.user = user;
+
+  next();
+});
 
 module.exports = authenticate;

@@ -191,58 +191,84 @@ const getCurrentUser = asyncHandler(async (req, res) => {
   ));
 });
 
-const logoutUser = asyncHandler(
-  async (req, res) => {
-    const refreshToken =
-      req.cookies.refreshToken;
+const logoutUser = asyncHandler(async (req, res) => {
+  const refreshToken = req.cookies.refreshToken;
 
-    if (refreshToken) {
-      const tokenHash = crypto
-        .createHash("sha256")
-        .update(refreshToken)
-        .digest("hex");
+  if (refreshToken) {
+    const tokenHash = crypto
+      .createHash("sha256")
+      .update(refreshToken)
+      .digest("hex");
 
-      const tokenRecord =
-        await RefreshToken.findOne({
-          tokenHash,
-        });
+    const tokenRecord = await RefreshToken.findOne({
+      tokenHash,
+    });
 
-      if (tokenRecord) {
-        const session =
-          await Session.findById(
-            tokenRecord.session
-          );
+    if (tokenRecord) {
+      const session = await Session.findById(
+        tokenRecord.session
+      );
 
-        if (session && !session.revokedAt) {
-          session.revokedAt = new Date();
+      if (session && !session.revokedAt) {
+        session.revokedAt = new Date();
 
-          await session.save();
-        }
+        await session.save();
       }
     }
-
-    res.clearCookie("accessToken", {
-      httpOnly: true,
-      secure:
-        process.env.NODE_ENV === "production",
-      sameSite: "strict",
-    });
-
-    res.clearCookie("refreshToken", {
-      httpOnly: true,
-      secure:
-        process.env.NODE_ENV === "production",
-      sameSite: "strict",
-    });
-
-    res.status(200).json(
-      new ApiResponse(
-        200,
-        "Logout successful"
-      )
-    );
   }
-);
+
+  res.clearCookie("accessToken", {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === "production",
+    sameSite: "strict",
+  });
+
+  res.clearCookie("refreshToken", {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === "production",
+    sameSite: "strict",
+  });
+
+  return res.status(200).json(
+    new ApiResponse(
+      200,
+      "Logout successful"
+    )
+  );
+});
+
+const logoutAllDevices = asyncHandler(async (req, res) => {
+  await Session.updateMany(
+    {
+      user: req.user._id,
+      revokedAt: null,
+    },
+    {
+      $set: {
+        revokedAt: new Date(),
+      },
+    }
+  );
+
+  res.clearCookie("accessToken", {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === "production",
+    sameSite: "strict",
+  });
+
+  res.clearCookie("refreshToken", {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === "production",
+    sameSite: "strict",
+  });
+
+  return res.status(200).json(
+    new ApiResponse(
+      200,
+      "Logged out from all devices"
+    )
+  );
+});
 
 const changePassword = asyncHandler(async (req, res) => {
     const { oldPassword, newPassword } = req.body;
@@ -712,4 +738,5 @@ module.exports = {
   sendVerificationEmail,
   verifyEmail,
   refreshAccessToken,
+  logoutAllDevices,
 };

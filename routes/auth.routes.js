@@ -17,6 +17,7 @@ const {
   sendVerificationEmail,
   verifyEmail,
   refreshAccessToken,
+  logoutAllDevices,
   } = require("../controllers/auth.controller");
 
 const {
@@ -63,10 +64,13 @@ router.get(
   getCurrentUser
 );
 
+
+// Logout should generally be idempotent.
 router.post(
   "/logout",
   logoutUser
 );
+
 
 router.put(
     "/change-password",
@@ -104,6 +108,12 @@ router.get(
 router.post(
   "/refresh-token",
   refreshAccessToken
+);
+
+router.post(
+  "/logout-all",
+  authenticate,
+  logoutAllDevices
 );
 
 module.exports = router;
